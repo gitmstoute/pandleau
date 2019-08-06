@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 
-setup(name='pandleau',
+setup(name='Pandleau',
       version='0.3.2-SNAPSHOT',
       packages=find_packages(exclude=['tests*']),
       license='MIT',
@@ -12,6 +12,6 @@ setup(name='pandleau',
              'Aaron Wiegel <aawiegel@gmail.com>',
       url='https://github.com/bwiley1/pandleau',
       download_url='https://github.com/bwiley1/pandleau/dist/pandleau-0.3.1.tar.gz',
-      py_modules=['pandleau'],
+      py_modules=['Pandleau'],
       keywords='tableau pandas extract tde hyper',
       classifiers=['Programming Language :: Python'])

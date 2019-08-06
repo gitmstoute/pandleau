@@ -7,25 +7,31 @@
 
 from __future__ import print_function
 import pandas
+from Pandleau.PandleauTable import PandleauTable
 from tableausdk import *
 from tqdm import tqdm
 
+extract_version = None
 try:
     from tableausdk.Extract import *
-
-    print("You are using the Tableau SDK, please save the output as .tde format")
+    extract_version = 1
 except ModuleNotFoundError:
     pass
-
 try:
     from tableausdk.HyperExtract import *
-
-    print("You are using the Extract API 2.0, please save the output as .hyper format")
+    extract_version = 2
 except ModuleNotFoundError:
     pass
 
+if extract_version & extract_version == 1:
+    print("You are using the Tableau SDK, please save the output as .tde format")
+elif extract_version & extract_version == 2:
+    print("You are using the Extract API 2.0, please save the output as .hyper format")
+else:
+    raise ModuleNotFoundError
 
-class pandleau(object):
+
+class Pandleau(object):
     """
     Modification to the pandas DataFrame object
 
@@ -76,47 +82,21 @@ class pandleau(object):
         try:
             # Use pandas api for inferring types for latest versions of pandas, lib method for earlier versions
             if pandas.__version__ >= '0.21.0':
-                return pandleau.mapper[pandas.api.types.infer_dtype(column.dropna())]
+                return Pandleau.mapper[pandas.api.types.infer_dtype(column.dropna())]
             else:
-                return pandleau.mapper[pandas.lib.infer_dtype(column.dropna())]
+                return Pandleau.mapper[pandas.lib.infer_dtype(column.dropna())]
         except:
             raise Exception('Error: Unknown pandas to Tableau data type.')
 
-    def __init__(self, dataframe):
-        if dataframe.__class__.__name__ != 'DataFrame':
-            raise Exception('Error: object is not a pandas DataFrame.')
+    def __init__(self, *args):
+        self._tables = []
+        for pandleau_table in args:
+            self.add_table(pandleau_table)
 
-        self._dataframe = dataframe
-        self._column_names = list(self._dataframe.columns)
-
-        # Initial column types
-        self._column_static_type = self._dataframe.apply(lambda x: pandleau.data_static_type(x), axis=0)
-
-    def set_spatial(self, column_index, indicator=True):
-        """
-        Allows the user to define a spatial column
-        @param column_index = index of spatial column,
-                             either number or name
-        @param indicator = change spatial characteristic
-
-        """
-
-        if indicator:
-            if column_index.__class__.__name__ == 'int':
-                self._column_static_type[column_index] = Type.SPATIAL
-            elif column_index.__class__.__name__ == 'str':
-                self._column_static_type[self._column_names.index(column_index)] = Type.SPATIAL
-            else:
-                raise Exception('Error: could not find column in dataframe.')
-        else:
-            if column_index.__class__.__name__ == 'int':
-                self._column_static_type[column_index] = pandleau.data_static_type(
-                    self._dataframe.iloc[:, column_index])
-            elif column_index.__class__.__name__ == 'str':
-                self._column_static_type[self._column_names.index(column_index)] = pandleau.data_static_type(
-                    self._dataframe.loc[:, column_index])
-            else:
-                raise Exception('Error: could not find column in dataframe.')
+    def add_table(self, table):
+        if not isinstance(table, PandleauTable):
+            raise Exception('Error: argument to Pandleau is not a pandas DataFrame.')
+        self._tables.append(table)
 
     def to_tableau(self, path, table_name='Extract', add_index=False):
         """
@@ -182,7 +162,7 @@ class pandleau(object):
         new_row = Row(extract_table)
         cols_range = range(len(self._dataframe.columns))
         column_set_functions = [
-            pandleau.entry_writer.get(col_type, lambda row, entry_index, _: row.setNull(entry_index))
+            Pandleau.entry_writer.get(col_type, lambda row, entry_index, _: row.setNull(entry_index))
             for col_type in
             self._column_static_type]
         i = 0
@@ -223,7 +203,7 @@ class pandleau(object):
             if pandas.isnull(entry):
                 new_row.setNull(entry_index)
             else:
-                (pandleau.entry_writer
+                (Pandleau.entry_writer
                  .get(column_type, lambda row, index, _: row.setNull(index))(new_row, entry_index, entry))
 
         except:
