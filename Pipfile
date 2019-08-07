@@ -10,6 +10,7 @@ pandas = "*"
 numpy = "*"
 tableauserverclient = "*"
 pydruid = "*"
+tqdm = "*"
 
 [requires]
 python_version = "3.7"

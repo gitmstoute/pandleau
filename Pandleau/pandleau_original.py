@@ -1,25 +1,31 @@
 # -*- coding: utf-8 -*-
 """
-
-
 @author: jamin, zhiruiwang, aawiegel
 """
 
 from __future__ import print_function
 import pandas
-from Pandleau.PandleauTable import PandleauTable
-from tableausdk.HyperExtract import Extract
-from tableausdk.HyperExtract import ExtractAPI
-from tableausdk.HyperExtract import Row
-from tableausdk.HyperExtract import TableDefinition
 from tableausdk import *
 from tqdm import tqdm
 
+try:
+    from tableausdk.Extract import *
 
-class Pandleau(object):
+    print("You are using the Tableau SDK, please save the output as .tde format")
+except ModuleNotFoundError:
+    pass
+
+try:
+    from tableausdk.HyperExtract import *
+
+    print("You are using the Extract API 2.0, please save the output as .hyper format")
+except ModuleNotFoundError:
+    pass
+
+
+class pandleau(object):
     """
     Modification to the pandas DataFrame object
-
     """
     mapper = {'string': Type.UNICODE_STRING,
               'bytes': Type.BOOLEAN,
@@ -61,27 +67,51 @@ class Pandleau(object):
         """
             Translates pandas datatypes to static datatypes (for initial columns)
             @param column is dataframe column
-
             """
 
         try:
             # Use pandas api for inferring types for latest versions of pandas, lib method for earlier versions
             if pandas.__version__ >= '0.21.0':
-                return Pandleau.mapper[pandas.api.types.infer_dtype(column.dropna())]
+                return pandleau.mapper[pandas.api.types.infer_dtype(column.dropna())]
             else:
-                return Pandleau.mapper[pandas.lib.infer_dtype(column.dropna())]
+                return pandleau.mapper[pandas.lib.infer_dtype(column.dropna())]
         except:
             raise Exception('Error: Unknown pandas to Tableau data type.')
 
-    def __init__(self, *args):
-        self._tables = []
-        for pandleau_table in args:
-            self.add_table(pandleau_table)
+    def __init__(self, dataframe):
+        if dataframe.__class__.__name__ != 'DataFrame':
+            raise Exception('Error: object is not a pandas DataFrame.')
 
-    def add_table(self, table):
-        if not isinstance(table, PandleauTable):
-            raise Exception('Error: argument to Pandleau is not a pandas DataFrame.')
-        self._tables.append(table)
+        self._dataframe = dataframe
+        self._column_names = list(self._dataframe.columns)
+
+        # Initial column types
+        self._column_static_type = self._dataframe.apply(lambda x: pandleau.data_static_type(x), axis=0)
+
+    def set_spatial(self, column_index, indicator=True):
+        """
+        Allows the user to define a spatial column
+        @param column_index = index of spatial column,
+                             either number or name
+        @param indicator = change spatial characteristic
+        """
+
+        if indicator:
+            if column_index.__class__.__name__ == 'int':
+                self._column_static_type[column_index] = Type.SPATIAL
+            elif column_index.__class__.__name__ == 'str':
+                self._column_static_type[self._column_names.index(column_index)] = Type.SPATIAL
+            else:
+                raise Exception('Error: could not find column in dataframe.')
+        else:
+            if column_index.__class__.__name__ == 'int':
+                self._column_static_type[column_index] = pandleau.data_static_type(
+                    self._dataframe.iloc[:, column_index])
+            elif column_index.__class__.__name__ == 'str':
+                self._column_static_type[self._column_names.index(column_index)] = pandleau.data_static_type(
+                    self._dataframe.loc[:, column_index])
+            else:
+                raise Exception('Error: could not find column in dataframe.')
 
     def to_tableau(self, path, table_name='Extract', add_index=False):
         """
@@ -89,7 +119,6 @@ class Pandleau(object):
         @param path = path to write file
         @param table_name = name of the table in the extract
         @param add_index = adds incrementing integer index before dataframe columns
-
         """
 
         # Delete debug log if already exists
@@ -141,24 +170,25 @@ class Pandleau(object):
     def set_column_values(self, tableau_table, extract_table, add_index):
         """
         Translates pandas datatypes to tableau datatypes
-
         """
         # Create new row
         new_row = Row(extract_table)
         cols_range = range(len(self._dataframe.columns))
         column_set_functions = [
-            Pandleau.entry_writer.get(col_type, lambda row, entry_index, _: row.setNull(entry_index))
+            pandleau.entry_writer.get(col_type, lambda row, entry_index, _: row.setNull(entry_index))
             for col_type in
             self._column_static_type]
         i = 0
 
         for row_index in tqdm(self._dataframe.itertuples(index=False), desc='processing table'):
+            # iterate over dataframe rows
 
             if add_index:
                 new_row.setInteger(0, i)
                 i += 1
 
             for col_index in cols_range:
+                # iterate over columns in this row
                 col_index_corrected = col_index+add_index
                 col_entry = row_index[col_index]
                 column_set_function = column_set_functions[col_index]
@@ -178,17 +208,16 @@ class Pandleau(object):
         """
         Determines the entry value
         @param new_row is the new row of the Tableau extract
-        @param entry_index is the index of the entry
-        @param entry is an entry of the dataframe
+        @param entry_index is the row index of the dataframe
+        @param entry is an row of the dataframe
         @param column_type is the data type of the corresponding entry column
-
         """
 
         try:
             if pandas.isnull(entry):
                 new_row.setNull(entry_index)
             else:
-                (Pandleau.entry_writer
+                (pandleau.entry_writer
                  .get(column_type, lambda row, index, _: row.setNull(index))(new_row, entry_index, entry))
 
         except:

@@ -1,57 +1,48 @@
 # -*- coding: utf-8 -*-
 """
-
-
 @author: jamin, zhiruiwang, aawiegel
 """
 
 from __future__ import print_function
+import config
 import pandas
-import importlib
+from tableausdk.HyperExtract import Extract
+from tableausdk.HyperExtract import ExtractAPI
+from tableausdk.HyperExtract import Row
+from tableausdk.HyperExtract import TableDefinition
 from tableausdk import *
-from Pandleau import Pandleau
+from Pandleau import TypeConversions
 from tqdm import tqdm
 
-
-
-def determine_extract_api_version():
-    extract_version = None
-    sdk_spec = importlib.util.find_spec("tableaudsk.Extract")
-
-    try:
-        from tableausdk.Extract import ExtractAPI
-        from tableausdk.Extract import Extract
-        extract_version = 1
-    except ModuleNotFoundError:
-        pass
-    try:
-        from tableausdk.HyperExtract import ExtractAPI
-        from tableausdk.HyperExtract import Extract
-        extract_version = 2
-    except ModuleNotFoundError:
-        pass
-
-    if extract_version & extract_version == 1:
-        print("You are using the Tableau SDK, please save the output as .tde format")
-    elif extract_version & extract_version == 2:
-        print("You are using the Extract API 2.0, please save the output as .hyper format")
-    else:
-        raise ModuleNotFoundError
-
-
-determine_extract_api_version()
+logger = config.logger
 
 
 class PandleauTable(object):
-    def __init__(self, name=None, dataframe=None):
-        self._name = name
-        self._dataframe = None
+    def __init__(self, dataframe, name=None, add_index=False, tableau_logging=False):
+        if tableau_logging:
+            ExtractAPI.initialize()
+        self._add_index = add_index
         self._column_names = None
         self._column_static_types = None
+        self._column_conversion_functions = []
+        self._df = None
+        self._hyper_output_path = None
+        self._name = name
+        self._extract = None
+        self._extract_schema_definition = None
+        # use the property setter logic
+        self.df = dataframe
 
-        if dataframe:
-            # use the dataframe.setter method to assign dataframe
-            self.dataframe = dataframe
+    def init_df(self):
+        if not self._name:
+            r, c = self._df.shape
+            self.name = f'table_{r}rows_x_{c}columns'
+        if self._add_index:
+            self.add_index_column()
+        self._column_names = [self._df.columns]
+        self._column_static_types = self._df.apply(lambda x: TypeConversions.data_static_type(x), axis=0)
+        self.set_extract_schema_definition()
+        self.set_conversion_functions()
 
     @property
     def name(self):
@@ -60,19 +51,39 @@ class PandleauTable(object):
     @name.setter
     def name(self, value):
         self._name = value
+        self._hyper_output_path = config.TABLEAU_HYPER_OUTPUT_DIR + self._name + '.hyper'
 
     @property
-    def dataframe(self):
-        return self._dataframe
+    def df(self):
+        return self._df
 
-    @dataframe.setter
-    def dataframe(self, value):
-        if isinstance(value, pandas.DataFrame):
-            self._dataframe = value
-            self._column_names = [self._dataframe.columns]
-            self._column_static_type = self._dataframe.apply(lambda x: Pandleau.data_static_type(x), axis=0)
-        else:
-            raise Exception('Error: PandleauTable.dataframe must be a pandas DataFrame.')
+    @df.setter
+    def df(self, df):
+        """
+        Assign a dataframe for this PandleauTable.
+
+        If dataframe changes, we need to run PandleauTable.setup() again.r
+        :param df:
+        :return:
+        """
+        if not isinstance(df, pandas.DataFrame):
+            logger.error("PandleauTable.dataframe must be a pandas DataFrame.")
+            raise TypeError("PandleauTable.dataframe must be a pandas DataFrame.")
+        self._df = df
+        self.init_df()
+
+    def add_index_column(self):
+        """
+        Add an integer index column to our dataframe as the left-most column
+        :return:
+        """
+        if 'index' in self._df.columns:
+            raise ValueError("The supplied dataframe already contains a column named 'index'")
+        old_columns = self._df.columns.to_list()
+        # add index column
+        self._df['index'] = self._df.index
+        # shift 'index' column to left-most position
+        self._df = self._df[['index'].extend(old_columns)]
 
     def set_spatial(self, column_index, indicator=True):
         """
@@ -85,20 +96,39 @@ class PandleauTable(object):
 
         if indicator:
             if column_index.__class__.__name__ == 'int':
-                self._column_static_type[column_index] = Type.SPATIAL
+                self._column_static_types[column_index] = Type.SPATIAL
             elif column_index.__class__.__name__ == 'str':
-                self._column_static_type[self._column_names.index(column_index)] = Type.SPATIAL
+                self._column_static_types[self._column_names.index(column_index)] = Type.SPATIAL
             else:
+                logger.error('could not find column in dataframe.')
                 raise Exception('Error: could not find column in dataframe.')
         else:
             if column_index.__class__.__name__ == 'int':
-                self._column_static_type[column_index] = Pandleau.data_static_type(
-                    self._dataframe.iloc[:, column_index])
+                self._column_static_types[column_index] = TypeConversions.data_static_type(
+                    self._df.iloc[:, column_index])
             elif column_index.__class__.__name__ == 'str':
-                self._column_static_type[self._column_names.index(column_index)] = Pandleau.data_static_type(
-                    self._dataframe.loc[:, column_index])
+                self._column_static_types[self._column_names.index(column_index)] = TypeConversions.data_static_type(
+                    self._df.loc[:, column_index])
             else:
+                logger.error('Error: could not find column in dataframe.')
                 raise Exception('Error: could not find column in dataframe.')
+
+    @property
+    def extract_schema_definition(self):
+        return self._extract_schema_definition
+
+    def set_extract_schema_definition(self):
+        """
+        create a schema for the Tableau Extract table
+        :return:
+        """
+        table_definition = TableDefinition()
+
+        # add column definitions for dataframe columns
+        for col_index, col_name in enumerate(self._df):
+            table_definition.addColumn(col_name, self._column_static_types[col_index])
+        # Create table
+        self._extract_schema_definition = table_definition
 
     def set_table_structure(self, new_extract, table_name, add_index=False):
         """
@@ -113,78 +143,73 @@ class PandleauTable(object):
         if add_index:
             index_col = 'index'
             suffix = 1
-            while index_col in self._dataframe.columns:
+            while index_col in self._df.columns:
                 index_col = '%s_%s' % (index_col, suffix)
                 suffix += 1
             table_def.addColumn(index_col, Type.INTEGER)
-        for col_index, col_name in enumerate(self._dataframe):
-            table_def.addColumn(col_name, self._column_static_type[col_index])
+        for col_index, col_name in enumerate(self._df):
+            table_def.addColumn(col_name, self._column_static_types[col_index])
         # Create table
         new_extract.addTable(table_name, table_def)
 
-    def set_column_values(self, tableau_table, extract_table, add_index):
+    def set_conversion_functions(self):
         """
-        Translates pandas datatypes to tableau datatypes
+        create an (ordered) list of lambda functions, corresponding to self._df.columns.
+        These lambda functions will translate pandas types to Tableau types.
+        :return:
         """
-        # Create new row
-        new_row = Row(extract_table)
-        cols_range = range(len(self._dataframe.columns))
-        column_set_functions = [
-            Pandleau.entry_writer.get(col_type, lambda row, entry_index, _: row.setNull(entry_index))
-            for col_type in
-            self._column_static_type]
-        i = 0
+        column_conversion_functions = []
+        default_function = lambda row, entry_index, _: row.setNull(entry_index)
+        for col_type in self._column_static_types:
+            fn = TypeConversions.entry_writer.get(col_type, default_function)
+            column_conversion_functions.append(fn)
+        self._column_conversion_functions = column_conversion_functions
 
-        for row_index in tqdm(self._dataframe.itertuples(index=False), desc='processing table'):
-
-            if add_index:
-                new_row.setInteger(0, i)
-                i += 1
-
-            for col_index in cols_range:
-                col_index_corrected = col_index+add_index
-                col_entry = row_index[col_index]
-                column_set_function = column_set_functions[col_index]
-
+    def populate_extract(self, tableau_table, extract_table_definition):
+        """
+        Populate Extract
+        :param tableau_table:
+        :param extract_table_definition:
+        :return:
+        """
+        # return column_conversion_functions
+        for df_row in tqdm(self._df.itertuples(index=False), desc='processing table'):
+            tableau_row = Row(self.extract_schema_definition)
+            for column_index in range(len(self._df.columns.to_list())):
+                column_name = df_row[column_index]
+                conversion_function = self._column_conversion_functions[column_index]
                 try:
-                    if pandas.isnull(col_entry):
-                        new_row.setNull(col_index_corrected)
+                    if pandas.isnull(column_name):
+                        tableau_row.setNull(column_index)
                     else:
-                        column_set_function(new_row, col_index_corrected, col_entry)
+                        conversion_function(tableau_row, column_index, column_name)
                 except:
-                    new_row.setNull(col_index_corrected)
+                    tableau_row.setNull(column_index)
 
-            tableau_table.insert(new_row)
+            tableau_table.insert(tableau_row)
 
-    def to_tableau(self, path, add_index=False):
+    def to_hyper(self):
         """
-        Converts a Pandas DataFrame to a Tableau .tde file
-        @param path = path to write file
-        @param add_index = adds incrementing integer index before dataframe columns
+        Publish this as a single-table Tableau Hyper extract
 
         """
 
+        self._extract = Extract(self._hyper_output_path)
         # Delete debug log if already exists
-        for file in [os.path.dirname(path) + '/debug.log',
+        for file in [os.path.dirname(self._hyper_output_path) + '/debug.log',
                      './DataExtract.log', './debug.log']:
             if os.path.isfile(file):
                 os.remove(file)
 
-        # Create Extract and Table
-        ExtractAPI.initialize()
-        new_extract = Extract(path)
-
-        if not new_extract.hasTable(self.name):
-            print('Table \'{}\' does not exist in extract {}, creating.'.format(self.name, path))
-            self.set_table_structure(new_extract, self.name, add_index)
-
-        new_table = new_extract.openTable(self.name)
-        table_def = new_table.getTableDefinition()
+        if not self._extract.hasTable(self._name):
+            logger.info(f"Table '{self._name}' does not exist in extract {self._hyper_output_path}, creating it.")
+            self.set_extract_schema_definition()
+            self._extract.addTable(self._name, self.extract_schema_definition)
 
         # Set Column values
-        self.set_column_values(new_table, table_def, add_index)
+        self.populate_extract(self._extract.openTable(self._name), self.extract_schema_definition)
 
         # Close extract
-        new_extract.close()
+        self._extract.close()
         ExtractAPI.cleanup()
 
