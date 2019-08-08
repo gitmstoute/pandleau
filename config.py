@@ -14,5 +14,6 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-TABLEAU_HYPER_OUTPUT_DIR = '/tmp/'
+
+TABLEAU_HYPER_OUTPUT_DIR = '/tmp/pandleau/'
 
