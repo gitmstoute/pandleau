@@ -99,7 +99,7 @@ class PandleauTable(object):
     @name.setter
     def name(self, value):
         self._name = value
-        self._hyper_output_path = config.TABLEAU_HYPER_OUTPUT_DIR + self._name + '.hyper'
+        self._hyper_output_path = config.PANDLEAU_HOME + self._name + '.hyper'
 
     def add_index_column(self):
         """
@@ -125,11 +125,11 @@ class PandleauTable(object):
         """
 
         if not extract_table:
-            logger.info(f"{self.name}: Using default extract...")
+            logger.debug(f"{self.name}: Using default extract...")
             extract_table = self._extract.openTable(self._name)
         else:
             assert isinstance(extract_table, Table)
-            logger.info(f"PandleauTable '{self.name}' using {extract_table} extract...")
+            logger.debug(f"PandleauTable '{self.name}' using {extract_table} extract...")
         for df_row in tqdm(self._df.itertuples(index=False), desc='processing table...'):
             tableau_row = Row(extract_table.getTableDefinition())
             for col_idx, col_name in enumerate(self._df.columns.to_list()):
@@ -137,7 +137,7 @@ class PandleauTable(object):
                     if pandas.isnull(col_name):
                         tableau_row.setNull(col_idx)
                     else:
-                        self._column_conversion_functions[col_idx](tableau_row, col_idx, col_name)
+                        self._column_conversion_functions[col_idx](tableau_row, col_idx, df_row[col_idx])
                 except Exception:
                     tableau_row.setNull(col_idx)
             extract_table.insert(tableau_row)

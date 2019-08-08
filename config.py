@@ -1,5 +1,6 @@
 import logging
 import sys
+import os
 
 
 # logging configs
@@ -15,5 +16,9 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 
 
-TABLEAU_HYPER_OUTPUT_DIR = '/tmp/pandleau/'
+if 'PANDLEAU_HOME' in os.environ:
+    PANDLEAU_HOME = os.environ['PANDLEAU_HOME'] + '/'
+else:
+    PANDLEAU_HOME = '/tmp/'
 
+logger.info(f"PANDLEAU_HOME is {PANDLEAU_HOME}")

@@ -25,7 +25,7 @@ class Pandleau(object):
             ExtractAPI.initialize()
         self._pandleau_tables = []  # just a list of PandleauTable objects
         self._name = name
-        self._hyper_output_path = config.TABLEAU_HYPER_OUTPUT_DIR + self._name + '.hyper'
+        self._hyper_output_path = config.PANDLEAU_HOME + self._name + '.hyper'
         self._extract = None
         for pandleau_table in args:
             self.add_table(pandleau_table)
@@ -37,7 +37,7 @@ class Pandleau(object):
     @name.setter
     def name(self, value):
         self._name = value
-        self._hyper_output_path = config.TABLEAU_HYPER_OUTPUT_DIR + self._name + '.hyper'
+        self._hyper_output_path = config.PANDLEAU_HOME + self._name + '.hyper'
 
     def add_table(self, table):
         if not isinstance(table, PandleauTable):

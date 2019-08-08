@@ -1,13 +1,12 @@
 # pandleau
 
-A quick and easy way to convert a Pandas DataFrame to a Tableau .tde or .hyper extract.
+A quick and easy way to convert a Pandas DataFrame to a Tableau .hyper extract.
 
 ## Getting Started
 
 ### Prerequisites
 
- - If you want to output as a .tde format, you'll need to install TableauSDK directly from Tableau's site [here]( https://onlinehelp.tableau.com/current/api/sdk/en-us/help.htm#SDK/tableau_sdk_installing.htm%3FTocPath%3D_____3).
- - If you want to output as a .hyper format, you'll need to install Extract API 2.0 directly from Tableau's site [here](https://onlinehelp.tableau.com/current/api/extract_api/en-us/help.htm#Extract/extract_api_installing.htm%3FTocPath%3D_____3).
+ - You'll need to install Extract API 2.0 directly from Tableau's site [here](https://onlinehelp.tableau.com/current/api/extract_api/en-us/help.htm#Extract/extract_api_installing.htm%3FTocPath%3D_____3).
  - Although Tableau's site claims Python 3 is not supported, this module is tested to work fully functional on Python 3.6.
 
 ### Installing
@@ -23,13 +22,13 @@ pip install pandleau
 ```
 But note that this will throw a warning to install tableausdk using the above link in Prerequisites.
 
-## Example
+## Example - Single table
 
 I grabbed the following Brazil flights data off of kaggle for this example: https://www.kaggle.com/microtang/exploring-brazil-flights-data/data.
 
 ```python
 import pandas as pd
-from pandleau import *
+from Pandleau import PandleauTable
 
 # Import the data
 example_df = pd.read_csv(r'example/BrFlights2.csv', encoding = 'iso-8859-1')
@@ -44,14 +43,14 @@ example_df['Chegada.Real'] = pd.to_datetime(example_df['Chegada.Real'], format =
 example_df.loc[:, 'SpatialDest'] = example_df['LongDest'].apply( lambda x: "POINT (" + str( round(x, 6) ) ) + \
 	example_df['LatDest'].apply( lambda x: " "+str( round(x, 6) ) + ")" )
 
-Pandleau
-df_tableau = pandleau(example_df)
+# If you only need a single-table Extract, use a PandleauTable
+df_tableau = PandleauTable(example_df)
 
 # Define spatial column
 df_tableau.set_spatial('SpatialDest', indicator=True)
 
-# Write .tde or .hyper Extract!
-df_tableau.to_tableau('test.hyper', add_index=False)
+# Write .hyper Extract!
+df_tableau.to_hyper('test.hyper', add_index=False)
 
 ```
 
