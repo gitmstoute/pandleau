@@ -36,11 +36,12 @@ class PandleauTable(object):
         self._column_conversion_functions = []
         self._df = None
         self._hyper_output_path = None
-        self._name = name
+        self._name = None
         self._extract = None
         self._extract_schema_definition = None
         # use the property setter logic
         self.df = dataframe
+        self.name = name
 
     def init_df(self):
         if not self._name:
@@ -97,8 +98,14 @@ class PandleauTable(object):
         return self._name
 
     @name.setter
-    def name(self, value):
-        self._name = value
+    def name(self, value: str):
+        if not isinstance(value, str):
+            raise TypeError("PandleauTable name must be a str")
+        if not value:
+            r, c = self._df.shape
+            self.name = f'pandleau_{r}rows_x_{c}columns'
+        else:
+            self._name = value
         self._hyper_output_path = config.PANDLEAU_HOME + self._name + '.hyper'
 
     def add_index_column(self):
