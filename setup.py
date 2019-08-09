@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 
 setup(name='Pandleau',
-      version='0.3.2-SNAPSHOT',
+      version='0.4.0-SNAPSHOT',
       packages=find_packages(exclude=['tests*']),
       license='MIT',
       description='A quick and easy way to convert a Pandas DataFrame to a Tableau extract.',
@@ -12,6 +12,6 @@ setup(name='Pandleau',
              'Aaron Wiegel <aawiegel@gmail.com>',
       url='https://github.com/bwiley1/pandleau',
       download_url='https://github.com/bwiley1/pandleau/dist/pandleau-0.3.1.tar.gz',
-      py_modules=['Pandleau'],
+      py_modules=['Pandleau', 'PandleauTable'],
       keywords='tableau pandas extract tde hyper',
       classifiers=['Programming Language :: Python'])
